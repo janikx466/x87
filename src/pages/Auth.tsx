@@ -4,7 +4,7 @@ import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import FingerprintJS from "@fingerprintjs/fingerprintjs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, generateInviteCode } from "@/contexts/AuthContext";
 import { db, WORKER_BASE } from "@/lib/firebase";
 import OrbitalLoader from "@/components/OrbitalLoader";
 import ConsentModal from "@/components/ConsentModal";
@@ -36,6 +36,7 @@ const Auth = () => {
       await loginWithGoogle();
       const u = (await import("firebase/auth")).getAuth().currentUser;
       if (!u) return;
+
       // Check if new user
       const userDoc = await getDoc(doc(db, "users", u.uid));
       if (!userDoc.exists()) {
@@ -53,8 +54,8 @@ const Auth = () => {
             }),
           });
         } catch {
-          // Fallback: create user doc directly
-          const code = u.uid.slice(0, 8).toUpperCase();
+          // Fallback: create user doc directly with 5 credits + unique invite code
+          const code = generateInviteCode(u.uid);
           await setDoc(doc(db, "users", u.uid), {
             email: u.email,
             displayName: u.displayName,
@@ -67,6 +68,7 @@ const Auth = () => {
             termsAccepted: true,
             termsAcceptedAt: serverTimestamp(),
             createdAt: serverTimestamp(),
+            isAdmin: false,
           });
         }
       }
