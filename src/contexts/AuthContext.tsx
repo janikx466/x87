@@ -60,6 +60,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         createdAt: new Date(),
       }, { merge: true });
 
+      // 🔥 ADMIN CLAIM CHECK (before snapshot to avoid race)
+      const token = await u.getIdTokenResult();
+      const isAdmin = token.claims.admin === true;
+
       // 🔥 REAL-TIME LISTENER
       unsubDoc = onSnapshot(userRef, (snap) => {
         if (snap.exists()) {
@@ -76,10 +80,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             inviteCode: d.inviteCode || "",
             termsAccepted: d.termsAccepted || false,
             createdAt: d.createdAt?.toDate?.() || new Date(),
-            isAdmin: false,
+            isAdmin,
           });
         } else {
-          // 🔥 FALLBACK (JUST IN CASE)
           setUserData({
             email: u.email || "",
             displayName: u.displayName || "",
@@ -91,18 +94,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             inviteCode: "",
             termsAccepted: false,
             createdAt: new Date(),
-            isAdmin: false,
+            isAdmin,
           });
         }
 
         setLoading(false);
       });
-
-      // 🔥 ADMIN CLAIM CHECK
-      const token = await u.getIdTokenResult();
-      if (token.claims.admin) {
-        setUserData(prev => prev ? { ...prev, isAdmin: true } : prev);
-      }
     });
 
     return () => {
