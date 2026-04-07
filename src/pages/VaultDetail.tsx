@@ -68,10 +68,18 @@ const VaultDetail = () => {
 
   const downloadQR = async () => {
     if (!qrExportRef.current) return;
-    const canvas = await html2canvas(qrExportRef.current, { scale: 3, useCORS: true, backgroundColor: "#0f172a" });
+    // Wait for next frame to ensure QR canvas is fully painted
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const canvas = await html2canvas(qrExportRef.current, {
+      scale: 3,
+      useCORS: true,
+      backgroundColor: "#0f172a",
+      allowTaint: true,
+      logging: false,
+    });
     const link = document.createElement("a");
     link.download = "SecretGPV-Vault-QR.png";
-    link.href = canvas.toDataURL();
+    link.href = canvas.toDataURL("image/png");
     link.click();
   };
 
