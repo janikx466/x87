@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User, onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
-import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { auth, db, googleProvider } from "@/lib/firebase";
 
 interface UserData {
@@ -34,14 +34,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
+    let unsubDoc: any;
+
+    const unsubAuth = onAuthStateChanged(auth, async (u) => {
       setUser(u);
-      if (!u) { setUserData(null); setLoading(false); return; }
-      // Listen to user doc real-time
-      const userDocRef = doc(db, "users", u.uid);
-      const unsubDoc = onSnapshot(userDocRef, (snap) => {
+
+      if (!u) {
+        setUserData(null);
+        setLoading(false);
+        return;
+      }
+
+      const userRef = doc(db, "users", u.uid);
+
+      // 🔥 AUTO CREATE USER DOC (IMPORTANT)
+      await setDoc(userRef, {
+        email: u.email,
+        displayName: u.displayName,
+        photoURL: u.photoURL,
+        credits: 0,
+        planName: "Free Trial",
+        totalVaults: 0,
+        inviteCode: "",
+        termsAccepted: false,
+        createdAt: new Date(),
+      }, { merge: true });
+
+      // 🔥 REAL-TIME LISTENER
+      unsubDoc = onSnapshot(userRef, (snap) => {
         if (snap.exists()) {
           const d = snap.data();
+
           setUserData({
             email: d.email || u.email || "",
             displayName: d.displayName || u.displayName || "",
@@ -55,17 +78,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             createdAt: d.createdAt?.toDate?.() || new Date(),
             isAdmin: false,
           });
+        } else {
+          // 🔥 FALLBACK (JUST IN CASE)
+          setUserData({
+            email: u.email || "",
+            displayName: u.displayName || "",
+            photoURL: u.photoURL || "",
+            credits: 0,
+            planName: "Free Trial",
+            planExpiry: null,
+            totalVaults: 0,
+            inviteCode: "",
+            termsAccepted: false,
+            createdAt: new Date(),
+            isAdmin: false,
+          });
         }
+
         setLoading(false);
       });
-      // Check admin claim
+
+      // 🔥 ADMIN CLAIM CHECK
       const token = await u.getIdTokenResult();
       if (token.claims.admin) {
         setUserData(prev => prev ? { ...prev, isAdmin: true } : prev);
       }
-      return () => unsubDoc();
     });
-    return () => unsub();
+
+    return () => {
+      unsubAuth();
+      if (unsubDoc) unsubDoc();
+    };
   }, []);
 
   const loginWithGoogle = async () => {
