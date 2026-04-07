@@ -1,13 +1,13 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { doc, getDoc, updateDoc, increment } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import QRCodeStyling from "qr-code-styling";
-import html2canvas from "html2canvas";
 import confetti from "canvas-confetti";
-import { ArrowLeft, QrCode, Share2, Eye, Lock, Download, Trash2 } from "lucide-react";
+import { ArrowLeft, QrCode, Share2, Eye, Lock, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
+import { toast } from "sonner";
 import OrbitalLoader from "@/components/OrbitalLoader";
 import logo from "@/assets/logo.png";
 
@@ -19,13 +19,18 @@ const VaultDetail = () => {
   const [loading, setLoading] = useState(true);
   const [showQR, setShowQR] = useState(false);
   const [qrReady, setQrReady] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const qrRef = useRef<HTMLDivElement>(null);
-  const qrExportRef = useRef<HTMLDivElement>(null);
+  const qrInstanceRef = useRef<QRCodeStyling | null>(null);
 
   useEffect(() => {
     if (!id) return;
     getDoc(doc(db, "vaults", id)).then((snap) => {
       if (snap.exists()) setVault({ id: snap.id, ...snap.data() });
+      setLoading(false);
+    }).catch((err) => {
+      console.error("Vault fetch error:", err);
+      toast.error("Failed to load vault");
       setLoading(false);
     });
   }, [id]);
@@ -51,6 +56,7 @@ const VaultDetail = () => {
         backgroundOptions: { color: "#ffffff" },
         imageOptions: { crossOrigin: "anonymous", margin: 10, imageSize: 0.3 },
       });
+      qrInstanceRef.current = qr;
       qr.append(qrRef.current);
       setQrReady(true);
       // Confetti
@@ -67,20 +73,21 @@ const VaultDetail = () => {
   };
 
   const downloadQR = async () => {
-    if (!qrExportRef.current) return;
-    // Wait for next frame to ensure QR canvas is fully painted
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const canvas = await html2canvas(qrExportRef.current, {
-      scale: 3,
-      useCORS: true,
-      backgroundColor: "#0f172a",
-      allowTaint: true,
-      logging: false,
-    });
-    const link = document.createElement("a");
-    link.download = "SecretGPV-Vault-QR.png";
-    link.href = canvas.toDataURL("image/png");
-    link.click();
+    if (!qrInstanceRef.current) return;
+    setDownloading(true);
+    try {
+      // Use qr-code-styling's native download — avoids html2canvas issues entirely
+      await qrInstanceRef.current.download({
+        name: "SecretGPV-Vault-QR",
+        extension: "png",
+      });
+      toast.success("QR downloaded!");
+    } catch (err) {
+      console.error("QR download error:", err);
+      toast.error("Download failed");
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const shareWhatsApp = () => {
@@ -108,7 +115,6 @@ const VaultDetail = () => {
         </div>
       ) : (
         <div className="space-y-4 max-w-lg mx-auto">
-          {/* Stats */}
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-card border border-border rounded-xl p-3 text-center">
               <Eye className="h-4 w-4 mx-auto text-muted-foreground mb-1" />
@@ -129,14 +135,13 @@ const VaultDetail = () => {
 
           <p className="text-xs text-muted-foreground">{vault.imageCount} images • Created {vault.createdAt?.toDate?.().toLocaleDateString()}</p>
 
-          {/* QR Button */}
           <Button onClick={generateQR} className="w-full" size="lg" disabled={showQR}>
             <QrCode className="h-5 w-5 mr-2" /> Generate QR Code
           </Button>
 
           {showQR && (
             <div className="animate-float-up">
-              <div ref={qrExportRef} className="bg-card/50 backdrop-blur-lg border border-border rounded-2xl p-6 text-center">
+              <div className="bg-card/50 backdrop-blur-lg border border-border rounded-2xl p-6 text-center">
                 <div ref={qrRef} className="bg-foreground p-3 rounded-xl inline-block shadow-lg mb-4" />
                 {vault.reminder && <p className="text-sm text-muted-foreground italic mb-3">"{vault.reminder}"</p>}
                 <div className="flex items-center justify-center gap-1 text-[10px] tracking-widest uppercase">
@@ -146,7 +151,9 @@ const VaultDetail = () => {
               </div>
               {qrReady && (
                 <div className="flex gap-3 mt-4">
-                  <Button onClick={downloadQR} variant="outline" className="flex-1"><Download className="h-4 w-4 mr-1" /> Download</Button>
+                  <Button onClick={downloadQR} variant="outline" className="flex-1" disabled={downloading}>
+                    <Download className="h-4 w-4 mr-1" /> {downloading ? "Saving..." : "Download"}
+                  </Button>
                   <Button onClick={shareWhatsApp} className="flex-1 bg-[hsl(142_71%_35%)]"><Share2 className="h-4 w-4 mr-1" /> WhatsApp</Button>
                 </div>
               )}
