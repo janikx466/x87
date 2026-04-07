@@ -47,7 +47,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       const userRef = doc(db, "users", u.uid);
 
-      // 🔥 AUTO CREATE USER DOC (IMPORTANT)
+      // ✅ AUTO CREATE USER DOC
       await setDoc(userRef, {
         email: u.email,
         displayName: u.displayName,
@@ -60,7 +60,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         createdAt: new Date(),
       }, { merge: true });
 
-      // 🔥 REAL-TIME LISTENER
+      // ✅ GET ADMIN CLAIM FIRST (important)
+      const token = await u.getIdTokenResult();
+      const isAdminFromToken = !!token.claims.admin;
+
+      // ✅ REAL-TIME LISTENER
       unsubDoc = onSnapshot(userRef, (snap) => {
         if (snap.exists()) {
           const d = snap.data();
@@ -76,10 +80,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             inviteCode: d.inviteCode || "",
             termsAccepted: d.termsAccepted || false,
             createdAt: d.createdAt?.toDate?.() || new Date(),
-            isAdmin: false,
+
+            // 🔥 FINAL FIX
+            isAdmin: d.isAdmin === true || isAdminFromToken,
           });
+
         } else {
-          // 🔥 FALLBACK (JUST IN CASE)
+          // fallback
           setUserData({
             email: u.email || "",
             displayName: u.displayName || "",
@@ -91,18 +98,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             inviteCode: "",
             termsAccepted: false,
             createdAt: new Date(),
-            isAdmin: false,
+
+            isAdmin: isAdminFromToken, // fallback admin
           });
         }
 
         setLoading(false);
       });
-
-      // 🔥 ADMIN CLAIM CHECK
-      const token = await u.getIdTokenResult();
-      if (token.claims.admin) {
-        setUserData(prev => prev ? { ...prev, isAdmin: true } : prev);
-      }
     });
 
     return () => {
