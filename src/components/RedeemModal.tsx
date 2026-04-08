@@ -17,9 +17,8 @@ const RedeemModal = ({ onClose }: { onClose: () => void }) => {
   const [code, setCode] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
-  const [showConfirm, setShowConfirm] = useState(false);
 
-  const handleValidate = async () => {
+  const handleRedeem = async () => {
     if (!code.trim() || !selectedPlan) return;
     setStatus("loading");
     try {
@@ -27,37 +26,14 @@ const RedeemModal = ({ onClose }: { onClose: () => void }) => {
       const res = await fetch(`${WORKER_BASE}/redeem`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ code: code.trim(), plan: selectedPlan }),
-      });
-      const data = await res.json();
-      if (data.status === "valid") {
-        setShowConfirm(true);
-        setStatus("idle");
-      } else {
-        setErrorMsg(data.message || "Invalid code");
-        setStatus("error");
-      }
-    } catch {
-      setErrorMsg("Network error. Try again.");
-      setStatus("error");
-    }
-  };
-
-  const handleConfirm = async () => {
-    setStatus("loading");
-    try {
-      const token = await user?.getIdToken();
-      const res = await fetch(`${WORKER_BASE}/redeem/confirm`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ code: code.trim(), plan: selectedPlan }),
+        body: JSON.stringify({ code: code.trim().toUpperCase(), uid: user?.uid }),
       });
       const data = await res.json();
       if (data.status === "success") {
         setStatus("success");
         setTimeout(onClose, 2000);
       } else {
-        setErrorMsg(data.message || "Redemption failed");
+        setErrorMsg(data.message || "Invalid code");
         setStatus("error");
       }
     } catch {
@@ -81,15 +57,6 @@ const RedeemModal = ({ onClose }: { onClose: () => void }) => {
           </div>
         ) : status === "loading" ? (
           <OrbitalLoader size="sm" text="Processing..." />
-        ) : showConfirm ? (
-          <div className="text-center">
-            <h3 className="text-lg font-bold mb-4">Confirm Activation</h3>
-            <p className="text-sm text-muted-foreground mb-6">Activate {selectedPlan} plan with code: <span className="font-mono text-primary">{code}</span>?</p>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={() => { setShowConfirm(false); }} className="flex-1">Cancel</Button>
-              <Button onClick={handleConfirm} className="flex-1">Confirm</Button>
-            </div>
-          </div>
         ) : (
           <>
             <h3 className="text-lg font-bold mb-4">Activate Plan</h3>
@@ -114,7 +81,7 @@ const RedeemModal = ({ onClose }: { onClose: () => void }) => {
                 {status === "error" && (
                   <p className="text-xs text-destructive flex items-center gap-1"><AlertCircle className="h-3 w-3" /> {errorMsg}</p>
                 )}
-                <Button onClick={handleValidate} disabled={!code.trim()} className="w-full">Activate Now</Button>
+                <Button onClick={handleRedeem} disabled={!code.trim()} className="w-full">Activate Now</Button>
                 <button onClick={() => setSelectedPlan(null)} className="text-xs text-muted-foreground hover:text-foreground w-full text-center">← Choose different plan</button>
               </div>
             )}
