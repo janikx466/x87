@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, getDocs, query, collection, where, serverTimestamp, Timestamp } from "firebase/firestore";
 import FingerprintJS from "@fingerprintjs/fingerprintjs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,35 @@ const Auth = () => {
 
   const handleGetStarted = () => setShowConsent(true);
 
+  const checkDeviceAbuse = async (deviceId: string): Promise<{ credits: number; planName: string; reason: string }> => {
+    try {
+      // PRIMARY: Check if same deviceId already used
+      const deviceDoc = await getDoc(doc(db, "devices", deviceId));
+      if (deviceDoc.exists()) {
+        return { credits: 0, planName: "No Trial", reason: "Same device reuse" };
+      }
+
+      // SOFT: Check for rapid account creation from same IP (behavior-based)
+      try {
+        const ipRes = await fetch("https://api.ipify.org?format=json");
+        const { ip } = await ipRes.json();
+        const twoMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 2 * 60 * 1000));
+        const recentDevices = await getDocs(
+          query(collection(db, "devices"), where("ip", "==", ip), where("createdAt", ">=", twoMinutesAgo))
+        );
+        if (!recentDevices.empty) {
+          return { credits: 0, planName: "No Trial", reason: "Suspicious activity" };
+        }
+        return { credits: 5, planName: "Free Trial", reason: "clean" };
+      } catch {
+        // If IP check fails, still allow (don't punish real users)
+        return { credits: 5, planName: "Free Trial", reason: "clean" };
+      }
+    } catch {
+      return { credits: 5, planName: "Free Trial", reason: "clean" };
+    }
+  };
+
   const handleConsent = async () => {
     setShowConsent(false);
     setAuthLoading(true);
@@ -37,9 +66,11 @@ const Auth = () => {
       const u = (await import("firebase/auth")).getAuth().currentUser;
       if (!u) return;
 
-      // Check if new user
       const userDoc = await getDoc(doc(db, "users", u.uid));
       if (!userDoc.exists()) {
+        // Device abuse check
+        const abuseResult = await checkDeviceAbuse(visitorId);
+
         // Register via worker
         const token = await u.getIdToken();
         try {
@@ -54,14 +85,14 @@ const Auth = () => {
             }),
           });
         } catch {
-          // Fallback: create user doc directly with 5 credits + unique invite code
+          // Fallback: create user doc directly
           const code = generateInviteCode(u.uid);
           await setDoc(doc(db, "users", u.uid), {
             email: u.email,
             displayName: u.displayName,
             photoURL: u.photoURL,
-            credits: 5,
-            planName: "Free Trial",
+            credits: abuseResult.credits,
+            planName: abuseResult.planName,
             planExpiry: null,
             totalVaults: 0,
             inviteCode: code,
@@ -70,6 +101,19 @@ const Auth = () => {
             createdAt: serverTimestamp(),
             isAdmin: false,
           });
+        }
+
+        // Store device record for future abuse checks
+        try {
+          const ipRes = await fetch("https://api.ipify.org?format=json").then(r => r.json()).catch(() => ({ ip: "unknown" }));
+          await setDoc(doc(db, "devices", visitorId), {
+            uid: u.uid,
+            ip: ipRes.ip,
+            userAgent: navigator.userAgent,
+            createdAt: serverTimestamp(),
+          });
+        } catch (e) {
+          console.error("Device record error:", e);
         }
       }
       navigate("/dashboard", { replace: true });
