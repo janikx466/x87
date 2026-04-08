@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, getDocs, query, orderBy, doc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, serverTimestamp, limit } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, doc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, limit } from "firebase/firestore";
 import { Shield, Users, Archive, Bell, Plus, Trash2, ToggleRight, RefreshCw, Eye, Gift, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
