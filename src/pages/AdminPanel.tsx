@@ -150,14 +150,28 @@ const AdminPanel = () => {
 
   const createCode = async () => {
     if (!newCode) return;
+    const normalizedCode = newCode.trim().toUpperCase();
+    if (!normalizedCode.startsWith("SGPV-")) {
+      toast.error("Code must start with SGPV-");
+      return;
+    }
     try {
-      await addDoc(collection(db, "redeem_codes"), {
-        code: newCode, value: parseFloat(newValue), plan: newPlan,
-        usageLimit: parseInt(newUsageLimit), usedCount: 0, disabled: false,
+      // Check if code already exists
+      const { getDoc: gd } = await import("firebase/firestore");
+      const existingDoc = await gd(doc(db, "redeem_codes", normalizedCode));
+      if (existingDoc.exists()) {
+        toast.error("Code already exists! Generating a new one.");
+        setNewCode(generateCode());
+        return;
+      }
+      // Use code as document ID (Worker expects redeem_codes/{code})
+      await setDoc(doc(db, "redeem_codes", normalizedCode), {
+        value: parseFloat(newValue), plan: newPlan,
+        usageLimit: parseInt(newUsageLimit), usedCount: 0, used: false, disabled: false,
         expiry: newExpiry ? new Date(newExpiry) : null, tag: newTag, note: newNote,
         createdAt: serverTimestamp(), createdBy: user?.uid,
       });
-      toast.success("Code created");
+      toast.success("Code created: " + normalizedCode);
       setNewCode(generateCode());
     } catch (err) {
       console.error(err);
@@ -245,7 +259,7 @@ const AdminPanel = () => {
             <div className="lg:col-span-2 space-y-3">
               {codesLoading ? <OrbitalLoader /> : codes.map(c => (
                 <div key={c.id} className="bg-card border border-border rounded-xl p-4 flex items-center justify-between">
-                  <p className="font-mono font-bold text-primary">{c.code}</p>
+                  <p className="font-mono font-bold text-primary">{c.id}</p>
                   <div className="flex gap-2">
                     <Button size="icon" variant="ghost" onClick={() => toggleCode(c.id, c.disabled)}><ToggleRight className={c.disabled ? "" : "text-primary"} /></Button>
                     <Button size="icon" variant="ghost" onClick={() => deleteCode(c.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
