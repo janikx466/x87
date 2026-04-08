@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import QRCodeStyling from "qr-code-styling";
 import confetti from "canvas-confetti";
+import html2canvas from "html2canvas";
 import { ArrowLeft, QrCode, Share2, Eye, Lock, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,7 +22,7 @@ const VaultDetail = () => {
   const [qrReady, setQrReady] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const qrRef = useRef<HTMLDivElement>(null);
-  const qrInstanceRef = useRef<QRCodeStyling | null>(null);
+  const qrExportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -56,10 +57,8 @@ const VaultDetail = () => {
         backgroundOptions: { color: "#ffffff" },
         imageOptions: { crossOrigin: "anonymous", margin: 10, imageSize: 0.3 },
       });
-      qrInstanceRef.current = qr;
       qr.append(qrRef.current);
       setQrReady(true);
-      // Confetti
       setTimeout(() => {
         confetti({ particleCount: 80, spread: 70, origin: { y: 0.4 }, colors: ["#ffffff", "#22c55e", "#ffd700"] });
         const end = Date.now() + 800;
@@ -73,14 +72,22 @@ const VaultDetail = () => {
   };
 
   const downloadQR = async () => {
-    if (!qrInstanceRef.current) return;
+    if (!qrExportRef.current) return;
     setDownloading(true);
     try {
-      // Use qr-code-styling's native download — avoids html2canvas issues entirely
-      await qrInstanceRef.current.download({
-        name: "SecretGPV-Vault-QR",
-        extension: "png",
+      // Wait for canvas to fully render
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const canvas = await html2canvas(qrExportRef.current, {
+        backgroundColor: "#ffffff",
+        scale: 3,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
       });
+      const link = document.createElement("a");
+      link.download = "SecretGPV-Vault-QR.png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
       toast.success("QR downloaded!");
     } catch (err) {
       console.error("QR download error:", err);
@@ -141,12 +148,17 @@ const VaultDetail = () => {
 
           {showQR && (
             <div className="animate-float-up">
-              <div className="bg-card/50 backdrop-blur-lg border border-border rounded-2xl p-6 text-center">
-                <div ref={qrRef} className="bg-foreground p-3 rounded-xl inline-block shadow-lg mb-4" />
-                {vault.reminder && <p className="text-sm text-muted-foreground italic mb-3">"{vault.reminder}"</p>}
-                <div className="flex items-center justify-center gap-1 text-[10px] tracking-widest uppercase">
-                  <span className="text-muted-foreground">Powered by</span>
-                  <span className="text-primary font-bold">SecretGPV Vault</span>
+              {/* Export container — html2canvas captures this entire div */}
+              <div ref={qrExportRef} style={{ background: "#ffffff", padding: "24px", borderRadius: "16px", textAlign: "center", display: "inline-block", width: "100%" }}>
+                <div ref={qrRef} style={{ display: "inline-block", marginBottom: "16px" }} />
+                {vault.reminder && (
+                  <p style={{ color: "#6b7280", fontSize: "14px", fontStyle: "italic", marginBottom: "12px", fontFamily: "system-ui, sans-serif" }}>
+                    "{vault.reminder}"
+                  </p>
+                )}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px", fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase" as const, fontFamily: "system-ui, sans-serif" }}>
+                  <span style={{ color: "#9ca3af" }}>Powered by</span>
+                  <span style={{ color: "#22c55e", fontWeight: 700 }}>SecretGPV Vault</span>
                 </div>
               </div>
               {qrReady && (
