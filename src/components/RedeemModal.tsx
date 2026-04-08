@@ -19,7 +19,7 @@ const RedeemModal = ({ onClose }: { onClose: () => void }) => {
   const [errorMsg, setErrorMsg] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const handleValidate = async () => {
+  const handleRedeem = async () => {
     if (!code.trim() || !selectedPlan) return;
     setStatus("loading");
     try {
@@ -27,37 +27,14 @@ const RedeemModal = ({ onClose }: { onClose: () => void }) => {
       const res = await fetch(`${WORKER_BASE}/redeem`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ code: code.trim(), plan: selectedPlan }),
-      });
-      const data = await res.json();
-      if (data.status === "valid") {
-        setShowConfirm(true);
-        setStatus("idle");
-      } else {
-        setErrorMsg(data.message || "Invalid code");
-        setStatus("error");
-      }
-    } catch {
-      setErrorMsg("Network error. Try again.");
-      setStatus("error");
-    }
-  };
-
-  const handleConfirm = async () => {
-    setStatus("loading");
-    try {
-      const token = await user?.getIdToken();
-      const res = await fetch(`${WORKER_BASE}/redeem/confirm`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ code: code.trim(), plan: selectedPlan }),
+        body: JSON.stringify({ code: code.trim().toUpperCase(), uid: user?.uid }),
       });
       const data = await res.json();
       if (data.status === "success") {
         setStatus("success");
         setTimeout(onClose, 2000);
       } else {
-        setErrorMsg(data.message || "Redemption failed");
+        setErrorMsg(data.message || "Invalid code");
         setStatus("error");
       }
     } catch {
